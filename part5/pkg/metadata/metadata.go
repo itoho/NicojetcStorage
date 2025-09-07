@@ -1,82 +1,93 @@
 package metadata
 
 import (
-	"encoding/binary"
-	"fmt"
-	"os"
+	"encoding/json"
+	"time"
+
+	"go.etcd.io/bbolt"
 )
 
-type ObjectInfo struct {
-	Version      [6]byte
-	FileNameSize uint32
-	FileSize     uint64
-	Created      int64
-	UpDated      int64
+const (
+	// bucketName はメタデータを保存するBoltDBのバケット名を定義します。
+	bucketName = "objects"
+)
+
+// ObjectMetadata はオブジェクトのメタ情報を保持します。
+// 将来の拡張性を考慮し、jsonタグを付与しています。
+type ObjectMetadata struct {
+	ObjectID     string    `json:"objectId"`
+	Size         int64     `json:"size"`
+	DataShards   int       `json:"dataShards"`
+	ParityShards int       `json:"parityShards"`
+	ShardPaths   []string  `json:"shardPaths"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
-func CreateMetaFile(metaFile, inputFile, outputDir string) error {
-	// 入力ファイルの情報を取得
-	fileInfo, err := os.Stat(inputFile)
-	if err != nil {
-		return fmt.Errorf("failed to get input file info: %w", err)
-	}
-
-	// メタデータを構築
-	info := ObjectInfo{
-		Version:      [6]byte{'v', '1', '.', '0', '.', '0'}, // バージョン情報
-		FileNameSize: uint32(len(inputFile)),                // ファイル名の長さ
-		FileSize:     uint64(fileInfo.Size()),               // ファイルサイズ
-		Created:      fileInfo.ModTime().Unix(),             // 作成日時（ファイルの最終更新日時を使用）
-		UpDated:      fileInfo.ModTime().Unix(),             // 更新日時（同じく最終更新日時を使用）
-	}
-
-	// メタデータファイルを作成
-	file, err := os.Create(metaFile)
-	if err != nil {
-		return fmt.Errorf("failed to create meta file: %w", err)
-	}
-	defer file.Close()
-
-	// メタデータを書き込む
-	err = binary.Write(file, binary.BigEndian, &info)
-	if err != nil {
-		return fmt.Errorf("failed to write meta file: %w", err)
-	}
-
-	return nil
+// MetadataStore はBoltDBをラップし、メタデータ操作を提供します。
+type MetadataStore struct {
+	db *bbolt.DB
 }
 
-func ReadMetaFile(metaFile string) (*ObjectInfo, error) {
-	// メタデータファイルを開く
-	file, err := os.Open(metaFile)
+// NewStore は新しいMetadataStoreを作成または既存のものを開きます。
+func NewStore(dbPath string) (*MetadataStore, error) {
+	db, err := bbolt.Open(dbPath, 0600, &bbolt.Options{Timeout: 1 * time.Second})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open meta file: %w", err)
-	}
-	defer file.Close()
-
-	// メタデータを読み込む
-	var info ObjectInfo
-	err = binary.Read(file, binary.BigEndian, &info)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read meta file: %w", err)
+		return nil, err
 	}
 
-	return &info, nil
+	// トランザクションを開始し、バケットが存在しない場合は作成します。
+	err = db.Update(func(tx *bbolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte(bucketName))
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &MetadataStore{db: db}, nil
 }
 
-func WriteMetaFile(metaFile string, info *ObjectInfo) error {
-	// メタデータファイルを作成または開く
-	file, err := os.Create(metaFile)
-	if err != nil {
-		return fmt.Errorf("failed to create meta file: %w", err)
-	}
-	defer file.Close()
+// Close はデータベース接続を閉じます。
+func (s *MetadataStore) Close() error {
+	return s.db.Close()
+}
 
-	// メタデータを書き込む
-	err = binary.Write(file, binary.BigEndian, info)
+// Put は指定されたオブジェクトキーでメタデータを保存します。
+func (s *MetadataStore) Put(objectKey string, meta ObjectMetadata) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(bucketName))
+
+		// メタデータをJSONにシリアライズします。
+		buf, err := json.Marshal(meta)
+		if err != nil {
+			return err
+		}
+
+		// データを保存します。
+		return b.Put([]byte(objectKey), buf)
+	})
+}
+
+// Get は指定されたオブジェクトキーに対応するメタデータを取得します。
+func (s *MetadataStore) Get(objectKey string) (*ObjectMetadata, error) {
+	var meta ObjectMetadata
+
+	err := s.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket([]byte(bucketName))
+		val := b.Get([]byte(objectKey))
+		if val == nil {
+			// キーが存在しない場合はエラーではなく、nilを返す仕様も考えられるが、
+			// ここでは明確にエラーとして扱う。
+			return bbolt.ErrBucketNotFound // より適切なエラー型を検討する余地あり
+		}
+
+		// JSONからメタデータをデシリアライズします。
+		return json.Unmarshal(val, &meta)
+	})
+
 	if err != nil {
-		return fmt.Errorf("failed to write meta file: %w", err)
+		return nil, err
 	}
 
-	return nil
+	return &meta, nil
 }

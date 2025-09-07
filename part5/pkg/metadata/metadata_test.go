@@ -2,66 +2,71 @@ package metadata
 
 import (
 	"os"
+	"reflect"
 	"testing"
+	"time"
 )
 
-func TestCreateMetaFile(t *testing.T) {
-	// テスト用の入力ファイルとメタデータファイルを準備
-	inputFile := "test_input.txt"
-	metaFile := "test_meta.dat"
-
-	// テスト用の入力ファイルを作成
-	err := os.WriteFile(inputFile, []byte("test data"), 0644)
+// createTempDB はテスト用の一次的なBoltDBファイルを作成し、そのパスを返します。
+func createTempDB(t *testing.T) string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "test-*.db")
 	if err != nil {
-		t.Fatalf("failed to create test input file: %v", err)
+		t.Fatalf("Failed to create temp db file: %v", err)
 	}
-	defer os.Remove(inputFile) // テスト後に削除
+	path := f.Name()
+	f.Close()
+	return path
+}
 
-	// メタデータファイルを作成
-	err = CreateMetaFile(metaFile, inputFile, "")
+func TestMetadataStore_PutAndGet(t *testing.T) {
+	dbPath := createTempDB(t)
+	store, err := NewStore(dbPath)
 	if err != nil {
-		t.Fatalf("CreateMetaFile failed: %v", err)
+		t.Fatalf("Failed to create new store: %v", err)
 	}
-	defer os.Remove(metaFile) // テスト後に削除
+	defer store.Close()
 
-	// メタデータファイルを確認
-	fileInfo, err := os.Stat(metaFile)
+	// テスト用のメタデータを作成
+	testMeta := ObjectMetadata{
+		ObjectID:     "test-object-123",
+		Size:         1024,
+		DataShards:   10, // テスト用の値
+		ParityShards: 4,  // テスト用の値
+		ShardPaths:   []string{"/path/to/shard1", "/path/to/shard2"},
+		CreatedAt:    time.Now().UTC().Truncate(time.Second), // 丸めて比較しやすくする
+	}
+	objectKey := "my-test-key"
+
+	// データを保存
+	err = store.Put(objectKey, testMeta)
 	if err != nil {
-		t.Fatalf("failed to stat meta file: %v", err)
+		t.Fatalf("Put() failed: %v", err)
 	}
 
-	if fileInfo.Size() == 0 {
-		t.Errorf("meta file is empty")
+	// データを取得
+	retrievedMeta, err := store.Get(objectKey)
+	if err != nil {
+		t.Fatalf("Get() failed: %v", err)
+	}
+
+	// 取得したデータが元のデータと一致するか確認
+	if !reflect.DeepEqual(testMeta, *retrievedMeta) {
+		t.Errorf("Get() got = %v, want = %v", *retrievedMeta, testMeta)
 	}
 }
 
-func TestReadMetaFile(t *testing.T) {
-	metaFile := "test_meta.dat"
-
-	// テスト用のメタデータを作成
-	info := &ObjectInfo{
-		Version:      [6]byte{'v', '1', '.', '0', '.', '0'},
-		FileNameSize: 10,
-		FileSize:     12345,
-		Created:      1617181920,
-		UpDated:      1617181930,
-	}
-
-	// メタデータを書き込む
-	err := WriteMetaFile(metaFile, info)
+func TestMetadataStore_GetNotFound(t *testing.T) {
+	dbPath := createTempDB(t)
+	store, err := NewStore(dbPath)
 	if err != nil {
-		t.Fatalf("WriteMetaFile failed: %v", err)
+		t.Fatalf("Failed to create new store: %v", err)
 	}
-	defer os.Remove(metaFile) // テスト後に削除
+	defer store.Close()
 
-	// メタデータを読み込む
-	readInfo, err := ReadMetaFile(metaFile)
-	if err != nil {
-		t.Fatalf("ReadMetaFile failed: %v", err)
-	}
-
-	// 読み込んだデータが正しいか確認
-	if *readInfo != *info {
-		t.Errorf("ReadMetaFile returned incorrect data: got %+v, want %+v", readInfo, info)
+	// 存在しないキーでデータを取得
+	_, err = store.Get("non-existent-key")
+	if err == nil {
+		t.Errorf("Expected an error when getting a non-existent key, but got nil")
 	}
 }
