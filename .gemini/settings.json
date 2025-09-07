@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "web-search": {
+      "command": "node",
+      "args": [
+        "C:/Users/itoho/web-search-mcp/dist/index.js"
+      ],
+      "cwd": "C:/Users/itoho/web-search-mcp"
+    }
+  }
+}

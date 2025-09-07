@@ -1,6 +1,8 @@
-module github.com/itoho/NicojetcStorage/part5
+module github.com/itoho/NicojectStorage/part5
 
 go 1.18
+
+replace github.com/itoho/NicojectStorage/part5 => ./
 
 require (
 	github.com/cheggaaa/pb/v3 v3.1.5
@@ -16,5 +18,6 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
+	go.etcd.io/bbolt v1.3.8 // indirect
 	golang.org/x/sys v0.26.0 // indirect
 )
