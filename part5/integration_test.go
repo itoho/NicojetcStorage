@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/itoho/NicojectStorage/part5/internal/decoder"
@@ -121,7 +122,7 @@ func TestIntegration_EncodeStoreRetrieveDecode(t *testing.T) {
 	if err := dec.Decode(retrievedShards, int(retrievedMeta.Size), &resultBuffer); err != nil {
 		t.Fatalf("Decode failed: %v", err)
 	}
-
+	time.Sleep(1 * time.Second) // デバッグ用に少し待つ
 	// 4. 検証
 	// ------------------------------------------------------------------
 	if !bytes.Equal(originalData, resultBuffer.Bytes()) {

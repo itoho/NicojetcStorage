@@ -1,6 +1,6 @@
 module github.com/itoho/NicojetcStorage/part4
 
-go 1.18
+go 1.22
 
 require (
 	github.com/cheggaaa/pb/v3 v3.1.5
