@@ -123,7 +123,6 @@ func TestGetCanonicalRequest(t *testing.T) {
 	}
 }
 
-// TestGetStringToSign はgetStringToSign関数のテストです。
 func TestGetStringToSign(t *testing.T) {
 	date := "20150830T123600Z"
 	canonicalRequestHash := "f536365729079f1455006c676767676767676767676767676767676767676767" // 仮のハッシュ

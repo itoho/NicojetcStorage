@@ -68,10 +68,25 @@ func TestStorageManager_StoreAndRetrieve(t *testing.T) {
 	})
 }
 
-func TestNewStorageManager_NoDirs(t *testing.T) {
-	// ディレクトリが指定されなかった場合にエラーになることを確認
-	_, err := NewStorageManager([]string{})
-	if err == nil {
-		t.Errorf("NewStorageManager() with no dirs should have failed, but it did not")
-	}
+func TestNewStorageManager(t *testing.T) {
+	t.Run("ディレクトリ未指定時にエラーを返すこと", func(t *testing.T) {
+		_, err := NewStorageManager([]string{})
+		if err == nil {
+			t.Error("NewStorageManager() with no dirs should have failed, but it did not")
+		}
+	})
+
+	t.Run("指定されたディレクトリが自動的に作成されること", func(t *testing.T) {
+		parentDir := t.TempDir()
+		targetDir := filepath.Join(parentDir, "auto-created-dir")
+
+		_, err := NewStorageManager([]string{targetDir})
+		if err != nil {
+			t.Fatalf("NewStorageManager() failed: %v", err)
+		}
+
+		if _, err := os.Stat(targetDir); os.IsNotExist(err) {
+			t.Errorf("Directory %s was not created", targetDir)
+		}
+	})
 }
