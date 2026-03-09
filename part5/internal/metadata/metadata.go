@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// ShardStatus represents the current state of a shard.
+// ShardStatus はシャードの現在の状態を表します。
 type ShardStatus string
 
 const (
@@ -14,7 +14,7 @@ const (
 	ShardStatusMigrating ShardStatus = "Migrating"
 )
 
-// DriveStatus represents the current state of a physical drive.
+// DriveStatus は物理ドライブの現在の状態を表します。
 type DriveStatus string
 
 const (
@@ -23,8 +23,8 @@ const (
 	DriveStatusFull         DriveStatus = "Full"
 )
 
-// ObjectMeta represents the metadata for a single object.
-// Tier 1: ObjectID -> ShardID
+// ObjectMeta は単一オブジェクトのメタデータを表します。
+// 第1層: ObjectID -> ShardID
 type ObjectMeta struct {
 	ObjectID     string `json:"objectId"`
 	ShardID      string `json:"shardId"`
@@ -33,53 +33,53 @@ type ObjectMeta struct {
 	ParityShards int    `json:"parityShards"`
 }
 
-// ShardConfig represents the mapping of a virtual shard to physical drives.
-// Tier 2: ShardID -> []PhysicalDriveID
+// ShardConfig は仮想シャードから物理ドライブへのマッピングを表します。
+// 第2層: ShardID -> []PhysicalDriveID
 type ShardConfig struct {
 	ShardID       string      `json:"shardId"`
-	DriveIDs      []string    `json:"driveIds"` // List of 20 DriveIDs (16+4)
+	DriveIDs      []string    `json:"driveIds"` // 20台のドライブIDリスト (16+4)
 	Status        ShardStatus `json:"status"`
-	TargetDriveID string      `json:"targetDriveId,omitempty"` // Reserved for migration
-	SwapIndex     int         `json:"swapIndex,omitempty"`     // Index in DriveIDs to be replaced
+	TargetDriveID string      `json:"targetDriveId,omitempty"` // 移行用に予約されたターゲットドライブ
+	SwapIndex     int         `json:"swapIndex,omitempty"`     // 置換対象となるDriveIDsのインデックス
 }
 
-// DriveInfo represents the metadata for a physical drive.
-// Tier 3: DriveID -> Endpoint/Status
+// DriveInfo は物理ドライブのメタデータを表します。
+// 第3層: DriveID -> Endpoint/Status
 type DriveInfo struct {
 	DriveID  string      `json:"driveId"`
 	Endpoint string      `json:"endpoint"`
 	Status   DriveStatus `json:"status"`
 }
 
-// FragmentMeta is stored on the physical drive along with the fragment data.
-// This allows for "self-describing" fragments and recovery if the central KV is lost.
+// FragmentMeta はフラグメントデータと共に物理ドライブ上に保存されます。
+// これにより「自己修復（Self-describing）」なフラグメントが可能になり、中央KVが破損した場合の復旧が可能になります。
 type FragmentMeta struct {
 	ObjectMeta
 	ShardID       string `json:"shardId"`
 	FragmentIndex int    `json:"fragmentIndex"` // 0-19
-	Checksum      string `json:"checksum"`      // HighwayHash or similar
+	Checksum      string `json:"checksum"`      // HighwayHash等
 }
 
-// MetadataStore abstracts the distributed KV store.
+// MetadataStore は分散KVストアを抽象化します。
 type MetadataStore interface {
-	// Object operations
+	// オブジェクト操作
 	GetObject(objectID string) (*ObjectMeta, error)
 	PutObject(meta *ObjectMeta) error
 
-	// Shard operations
+	// シャード操作
 	GetShard(shardID string) (*ShardConfig, error)
 	PutShard(config *ShardConfig) error
 
-	// Drive operations
+	// ドライブ操作
 	GetDrive(driveID string) (*DriveInfo, error)
 	PutDrive(info *DriveInfo) error
 
-	// Atomic Rebalancing Operations
+	// アトミック・リバランシング（再配置）操作
 	BeginMigration(shardID string, targetDriveID string, swapIndex int) error
 	CommitMigration(shardID string) error
 }
 
-// MemMetadataStore is an in-memory implementation of MetadataStore for demonstration.
+// MemMetadataStore はデモンストレーション用のMetadataStoreのインメモリ実装です。
 type MemMetadataStore struct {
 	mu      sync.RWMutex
 	objects sync.Map // map[string]*ObjectMeta
@@ -109,7 +109,7 @@ func (s *MemMetadataStore) GetShard(shardID string) (*ShardConfig, error) {
 	if !ok {
 		return nil, errors.New("shard not found")
 	}
-	// Return a copy to avoid external modification of the stored pointer
+	// 保存されているポインタの外部からの意図しない変更を防ぐため、コピーを返します
 	orig := val.(*ShardConfig)
 	copyIDs := make([]string, len(orig.DriveIDs))
 	copy(copyIDs, orig.DriveIDs)
@@ -140,7 +140,7 @@ func (s *MemMetadataStore) PutDrive(info *DriveInfo) error {
 	return nil
 }
 
-// BeginMigration starts the migration of a shard\s fragment to a new drive.
+// BeginMigration はシャードのフラグメントを新しいドライブへ移行する処理を開始します。
 func (s *MemMetadataStore) BeginMigration(shardID string, targetDriveID string, swapIndex int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -158,7 +158,7 @@ func (s *MemMetadataStore) BeginMigration(shardID string, targetDriveID string, 
 		return fmt.Errorf("invalid swap index %d", swapIndex)
 	}
 
-	// Verify target drive exists and is online
+	// ターゲットドライブが存在し、オンラインであることを確認します
 	drive, err := s.GetDrive(targetDriveID)
 	if err != nil {
 		return err
@@ -167,7 +167,7 @@ func (s *MemMetadataStore) BeginMigration(shardID string, targetDriveID string, 
 		return fmt.Errorf("target drive %s is not online", targetDriveID)
 	}
 
-	// Update shard state to Migrating
+	// シャードの状態を Migrating に更新します
 	shard.Status = ShardStatusMigrating
 	shard.TargetDriveID = targetDriveID
 	shard.SwapIndex = swapIndex
@@ -175,7 +175,7 @@ func (s *MemMetadataStore) BeginMigration(shardID string, targetDriveID string, 
 	return s.PutShard(shard)
 }
 
-// CommitMigration completes the migration by updating the drive list and resetting status.
+// CommitMigration はドライブリストを更新し、ステータスをリセットすることで移行を完了させます。
 func (s *MemMetadataStore) CommitMigration(shardID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -189,10 +189,10 @@ func (s *MemMetadataStore) CommitMigration(shardID string) error {
 		return fmt.Errorf("shard %s is not in migrating state", shardID)
 	}
 
-	// Swap the physical drive ID
+	// 物理ドライブIDを差し替えます
 	shard.DriveIDs[shard.SwapIndex] = shard.TargetDriveID
 	
-	// Reset migration state
+	// 移行状態をリセットします
 	shard.Status = ShardStatusActive
 	shard.TargetDriveID = ""
 	shard.SwapIndex = 0

@@ -8,7 +8,7 @@ import (
 func TestRebalancing(t *testing.T) {
 	store := NewMemMetadataStore()
 
-	// 1. Setup initial drives (20 drives for a shard)
+	// 1. 初期ドライブのセットアップ (シャード用に20台)
 	driveIDs := make([]string, 20)
 	for i := 0; i < 20; i++ {
 		driveID := fmt.Sprintf("drive-%d", i)
@@ -20,7 +20,7 @@ func TestRebalancing(t *testing.T) {
 		})
 	}
 
-	// 2. Setup a shard
+	// 2. シャードのセットアップ
 	shardID := "shard-0"
 	initialConfig := &ShardConfig{
 		ShardID:  shardID,
@@ -29,7 +29,7 @@ func TestRebalancing(t *testing.T) {
 	}
 	store.PutShard(initialConfig)
 
-	// 3. Setup a new drive to migrate to
+	// 3. 移行先の新しいドライブのセットアップ
 	newDriveID := "drive-new"
 	store.PutDrive(&DriveInfo{
 		DriveID:  newDriveID,
@@ -37,8 +37,8 @@ func TestRebalancing(t *testing.T) {
 		Status:   DriveStatusOnline,
 	})
 
-	// 4. Begin Migration (rebalancing 1/20 of the shard)
-	// Swap drive at index 5 with the new drive
+	// 4. 移行（リバランシング）の開始 (シャードの1/20を再配置)
+	// インデックス5のドライブを新しいドライブと入れ替える
 	swapIndex := 5
 	oldDriveID := driveIDs[swapIndex]
 	err := store.BeginMigration(shardID, newDriveID, swapIndex)
@@ -46,7 +46,7 @@ func TestRebalancing(t *testing.T) {
 		t.Fatalf("BeginMigration failed: %v", err)
 	}
 
-	// Verify shard status
+	// シャードの状態を確認
 	shard, _ := store.GetShard(shardID)
 	if shard.Status != ShardStatusMigrating {
 		t.Errorf("Expected status Migrating, got %s", shard.Status)
@@ -55,26 +55,26 @@ func TestRebalancing(t *testing.T) {
 		t.Errorf("Expected target drive %s, got %s", newDriveID, shard.TargetDriveID)
 	}
 	if shard.DriveIDs[swapIndex] != oldDriveID {
-		t.Errorf("DriveID at swapIndex should not change until Commit")
+		t.Errorf("CommitされるまでswapIndexのDriveIDは変更されないはずです")
 	}
 
-	// 5. Commit Migration
+	// 5. 移行の完了 (Commit)
 	err = store.CommitMigration(shardID)
 	if err != nil {
 		t.Fatalf("CommitMigration failed: %v", err)
 	}
 
-	// 6. Verify final state
+	// 6. 最終状態の確認
 	shard, _ = store.GetShard(shardID)
 	if shard.Status != ShardStatusActive {
 		t.Errorf("Expected status Active, got %s", shard.Status)
 	}
 	if shard.DriveIDs[swapIndex] != newDriveID {
-		t.Errorf("Expected DriveID at index %d to be %s, got %s", swapIndex, newDriveID, shard.DriveIDs[swapIndex])
+		t.Errorf("インデックス%dのDriveIDが%sに更新されているはずですが、%sでした", swapIndex, newDriveID, shard.DriveIDs[swapIndex])
 	}
 	if shard.TargetDriveID != "" {
-		t.Errorf("Expected TargetDriveID to be empty, got %s", shard.TargetDriveID)
+		t.Errorf("TargetDriveIDは空であるはずですが、%sでした", shard.TargetDriveID)
 	}
 
-	fmt.Printf("Rebalancing successful: %s at index %d replaced by %s\n", oldDriveID, swapIndex, newDriveID)
+	fmt.Printf("Rebalancing successful: %s at index %d replaced by %s", oldDriveID, swapIndex, newDriveID)
 }
